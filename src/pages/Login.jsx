@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
-import logo from '../assets/legacy-logo.png'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -31,12 +30,11 @@ export default function Login() {
     <div className="login-wrap">
       <div className="login-card">
         <div className="login-head">
-          <img
-            className="login-logo"
-            src={logo}
-            alt="The Legacy Group — Listing Leaders"
-          />
-          <div className="login-tag">Team Portal</div>
+          <span className="brand-mark">L</span>
+          <div>
+            <div className="login-title">Legacy Home Buyers</div>
+            <div className="login-tag">Team Portal</div>
+          </div>
         </div>
 
         <form onSubmit={handleSubmit}>

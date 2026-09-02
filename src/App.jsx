@@ -8,7 +8,6 @@ import {
   useLocation,
 } from 'react-router-dom'
 import { supabase } from './lib/supabase.js'
-import logo from './assets/legacy-logo.png'
 import Login from './pages/Login.jsx'
 import LeadManager from './pages/LeadManager.jsx'
 import DealUnderwriter from './pages/DealUnderwriter.jsx'
@@ -55,11 +54,12 @@ function useSession() {
 function BrandBlock() {
   return (
     <div className="brand">
-      <img
-        className="sidebar-logo"
-        src={logo}
-        alt="The Legacy Group — Listing Leaders"
-      />
+      <span className="brand-mark">L</span>
+      <span>
+        <span className="brand-name">Legacy Home Buyers</span>
+        <br />
+        <span className="brand-sub">Team Portal</span>
+      </span>
     </div>
   )
 }
