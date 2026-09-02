@@ -85,6 +85,18 @@ input:focus {
   letter-spacing: 0.02em;
 }
 
+.sidebar-logo {
+  display: block;
+  max-height: 48px;
+  width: auto;
+}
+
+.login-logo {
+  display: block;
+  max-height: 80px;
+  width: auto;
+}
+
 .brand-mark {
   display: grid;
   place-items: center;
