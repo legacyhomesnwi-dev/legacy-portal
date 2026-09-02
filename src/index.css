@@ -87,13 +87,15 @@ input:focus {
 
 .sidebar-logo {
   display: block;
-  max-height: 48px;
-  width: auto;
+  height: 44px;
+  width: 44px;
+  flex-shrink: 0;
+  object-fit: contain;
 }
 
 .login-logo {
   display: block;
-  max-height: 80px;
+  max-height: 120px;
   width: auto;
 }
 
