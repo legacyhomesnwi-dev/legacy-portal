@@ -15,7 +15,9 @@ function num(v) {
 }
 
 function mapLeadToProperty(lead) {
-  return {
+  const ownerIsEntity = ENTITY_OWNER_RE.test(lead.owner_name || '');
+
+  const property = {
     // identity / entity-match-confidence inputs
     id: lead.id,
     parcelNumber: lead.parcel_number ?? undefined,
@@ -23,7 +25,7 @@ function mapLeadToProperty(lead) {
     city: lead.city ?? undefined,
 
     // derived: is the owner an estate / trust / LLC / corp?
-    ownerIsEstateTrustOrLLC: ENTITY_OWNER_RE.test(lead.owner_name || ''),
+    ownerIsEstateTrustOrLLC: ownerIsEntity,
 
     // pass-through signal inputs (coerced to number where numeric)
     assessedValue: num(lead.assessed_value),
@@ -32,6 +34,15 @@ function mapLeadToProperty(lead) {
     isAbsenteeOwner: lead.is_absentee_owner ?? undefined,
     isOutOfState: lead.is_out_of_state ?? undefined,
   };
+
+  // Confidence dampener: a name-regex hit is a strong indicator, not a
+  // confirmed entity classification, so tell the engine to weight this one
+  // signal at 0.8 instead of its 0.85 default.
+  if (ownerIsEntity) {
+    property['OWN_ESTATE_TRUST_LLC__confidence'] = 0.8;
+  }
+
+  return property;
 }
 
 module.exports = { mapLeadToProperty, ENTITY_OWNER_RE };
