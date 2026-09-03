@@ -1,12 +1,12 @@
 // mlsEmailParser.js
 // Parses the ACTUAL verified Flexmls listing-alert email format (plain text
-// body). Verified against 4 real emails from listingupdates@flexmail.flexmls.com
-// to the agent inbox on 2026-09-03. Do not add fields that
-// weren't actually observed -- beds/baths/sqft/year_built/garage/basement/
-// remarks/photos/listing agent are NOT present in this email format.
+// body). Verified against real emails from listingupdates@flexmail.flexmls.com
+// to the agent inbox on 2026-09-03. Do not add fields that weren't actually
+// observed -- beds/baths/sqft/year_built/garage/basement/remarks/photos/
+// listing agent are NOT present in this email format.
 //
 // Real body structure (confirmed across New Listing / Price Change / Back
-// On Market variants):
+// On Market / Status Change variants):
 //
 //   {saved_search_name}
 //
@@ -21,7 +21,7 @@
 //
 //   Follow this link to view the listing in flexmls: {flexmls_url}
 //
-//   {agent signature block — name / brokerage / address / email / phone / license}
+//   {agent signature block -- redacted, not needed for parsing}
 
 const UPDATE_TYPES = ['New Listing', 'Price Change', 'Back On Market', 'Status Change'];
 

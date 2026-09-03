@@ -1,14 +1,14 @@
-const { processMlsEmail, toEventType } = require('./ingestMlsEmail');
+const { processMlsEmail, processMlsDigestEmail, toEventType } = require('./ingestMlsEmail');
 const { REAL_FIXTURES } = require('./realFixtures');
 
-console.log('=== TEST 1-9: Pipeline against 4 real fixtures ===\n');
+console.log('=== TEST 1-9: Pipeline against 4 real single-listing fixtures ===\n');
 
 // Simulated "state" -- in real use this comes from actual Supabase queries.
-// Starts empty (no existing listings/properties), gets updated as we process
-// each fixture, so fixture #4 (same MLS# as #3) correctly finds a match.
 const state = { listingsByMls: {}, propertiesByAddress: {} };
+const singleFixtures = REAL_FIXTURES.filter((f) => !f.label.startsWith('Digest'));
+const digestFixture = REAL_FIXTURES.find((f) => f.label.startsWith('Digest'));
 
-for (const fixture of REAL_FIXTURES) {
+for (const fixture of singleFixtures) {
   console.log(`--- ${fixture.label} ---`);
 
   // Look up existing state (mimics what a real DB query would return)
@@ -60,4 +60,15 @@ try {
 } catch (e) {
   console.log('Handled gracefully:', e.message);
 }
+
+console.log('\n=== TEST 13: Digest email — Portage Buy Box, 5 bundled listings ===\n');
+const digestResult = processMlsDigestEmail(digestFixture, {});
+console.log('is_digest:', digestResult.is_digest, '| listings parsed:', digestResult.results.length);
+digestResult.results.forEach((r) => {
+  console.log(
+    ` MLS #${r.incoming_record.raw_mls_number} | $${r.incoming_record.raw_price} | ${r.incoming_record.raw_address} | external_record_id=${r.incoming_record.external_record_id} | match=${r.match.match_result} | status=${r.incoming_record.processing_status}`
+  );
+});
+const uniqueIds = new Set(digestResult.results.map((r) => r.incoming_record.external_record_id));
+console.log('Unique external_record_ids:', uniqueIds.size, '(expect 5, each independently idempotent)');
 
