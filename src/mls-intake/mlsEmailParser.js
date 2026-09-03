@@ -25,6 +25,61 @@
 
 const UPDATE_TYPES = ['New Listing', 'Price Change', 'Back On Market', 'Status Change'];
 
+// Digest emails bundle multiple listings into one message (e.g. periodic
+// "here's everything currently matching your saved search" rather than a
+// single triggered event). Detected by a distinct marker phrase that never
+// appears in single-listing emails.
+function isDigestFormat(plaintextBody) {
+  return /Listings for ["\u201c]Subscription/.test(plaintextBody);
+}
+
+// Parses a digest email into an ARRAY of individual listing entries, since
+// one email genuinely contains multiple properties. Each entry gets the
+// same shape as a single-listing parse result would, EXCEPT there is no
+// per-listing update_type in this format -- Flexmls doesn't tell us whether
+// each entry is new/changed/etc. in a digest, so update_type is explicitly
+// 'Digest Listing' rather than guessing.
+function parseFlexmlsDigestEmail({ messageId, subject, sender, receivedAt, plaintextBody }) {
+  if (!plaintextBody) {
+    throw new Error('Empty email body -- cannot parse.');
+  }
+
+  const savedSearchName = subject?.trim() || null;
+  const urlMatch = plaintextBody.match(/(https:\/\/www\.flexmls\.com\/notifications\.html\?[^\s]+)/);
+  const flexmlsUrl = urlMatch ? urlMatch[1] : null;
+
+  // Each listing entry: $PRICE \n ADDRESS, CITY, STATE ZIP \n STATUS - MLS #NUMBER
+  const entryPattern = /\$([\d,]+\.\d{2})\n(.+?),\s*([A-Za-z .]+),\s*([A-Z]{2})\s+(\d{5})\n(.+?)\s*-\s*MLS #(\d+)/g;
+
+  const listings = [];
+  let match;
+  while ((match = entryPattern.exec(plaintextBody)) !== null) {
+    listings.push({
+      list_price: parseFloat(match[1].replace(/,/g, '')),
+      street_address: match[2].trim(),
+      city: match[3].trim(),
+      state: match[4].trim(),
+      zip: match[5].trim(),
+      listing_status: match[6].trim(),
+      mls_number: match[7].trim(),
+      update_type: 'Digest Listing',
+    });
+  }
+
+  return {
+    source_email_id: messageId,
+    received_at: receivedAt,
+    sender,
+    subject,
+    saved_search_name: savedSearchName,
+    flexmls_url: flexmlsUrl,
+    listings,
+    is_digest: true,
+    parse_errors: listings.length === 0 ? ['digest format detected but zero listing entries extracted'] : [],
+    parsed_successfully: listings.length > 0,
+  };
+}
+
 function parseFlexmlsEmail({ messageId, subject, sender, receivedAt, plaintextBody }) {
   if (!plaintextBody) {
     throw new Error('Empty email body -- cannot parse.');
@@ -110,5 +165,5 @@ function normalizeAddress(streetAddress, city, state, zip) {
   return `${clean(streetAddress)}, ${clean(city)}, ${clean(state)} ${(zip || '').trim()}`;
 }
 
-module.exports = { parseFlexmlsEmail, normalizeAddress, UPDATE_TYPES };
+module.exports = { parseFlexmlsEmail, normalizeAddress, UPDATE_TYPES, isDigestFormat, parseFlexmlsDigestEmail };
 
