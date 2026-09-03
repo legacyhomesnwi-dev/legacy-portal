@@ -950,3 +950,12 @@ input:focus {
   gap: 6px;
   justify-content: flex-end;
 }
+
+.da-status {
+  margin-top: 10px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.da-status.go-yes { color: #22c55e; }
+.da-status.go-no { color: var(--fire); }
+.da-status.da-status-mid { color: var(--accent); }

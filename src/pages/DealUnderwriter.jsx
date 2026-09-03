@@ -28,14 +28,20 @@ const FINANCINGS = [
   ['hardMoney', 'Hard Money'],
   ['creditLine', 'Credit Line'],
 ]
-const OFFER_POINTS = [
+// [ladder key on result.offerLadder, scenario key on flip.scenarios.*, label]
+const OFFER_TIERS = [
   ['lao', 'atLAO', 'LAO (60%)'],
   ['tier2', 'atTier2', 'Tier 2 (62.5%)'],
   ['opening', 'atOpening', 'Opening (65%)'],
   ['tier4', 'atTier4', 'Tier 4 (70%)'],
   ['mao', 'atMAO', 'MAO (75%)'],
-  ['asking', 'atAsking', 'Asking'],
 ]
+
+function flipStatusLine(flip) {
+  if (flip.meetsTarget) return { cls: 'go-yes', text: '✓ Hits $60K target' }
+  if (flip.meetsMin) return { cls: 'da-status-mid', text: '~ Meets $35K min' }
+  return { cls: 'go-no', text: '✗ Below minimum' }
+}
 
 function money(n) {
   if (n == null || n === '' || Number.isNaN(Number(n))) return '—'
@@ -324,12 +330,61 @@ export default function DealUnderwriter() {
 
           <div className="da-section">
             <h3>Flip &nbsp;<Go v={flip.go} /></h3>
+
+            <h3 style={{ marginTop: 4 }}>Offer → profit (net, after all costs)</h3>
+            <div className="lead-table-wrap">
+              <table className="lead-table">
+                <thead>
+                  <tr>
+                    <th>Offer tier</th>
+                    <th>Offer $</th>
+                    {FINANCINGS.map(([k, label]) => <th key={k}>{label}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {OFFER_TIERS.map(([ladderKey, scKey, label]) => (
+                    <tr key={scKey}>
+                      <td className="cell-owner">{label}</td>
+                      <td className="cell-num">{money(ladder[ladderKey])}</td>
+                      {FINANCINGS.map(([fin]) => (
+                        <td className="cell-num" key={fin}>
+                          {money(flip.scenarios[fin][scKey])}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                  <tr>
+                    <td className="cell-owner">Asking Price</td>
+                    <td className="cell-num">{money(result.inputs.askingPrice)}</td>
+                    {FINANCINGS.map(([fin]) => (
+                      <td className="cell-num" key={fin}>
+                        {money(flip.scenarios[fin].atAsking)}
+                      </td>
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            {(() => {
+              const s = flipStatusLine(flip)
+              return (
+                <p className={`da-status ${s.cls}`}>
+                  {s.text}{' '}
+                  <span style={{ color: 'var(--text-dim)', fontWeight: 400 }}>
+                    (cash profit at asking {money(flip.scenarios.cash.atAsking)}; min $35K / target $60K keyed to the cash-at-asking figure)
+                  </span>
+                </p>
+              )
+            })()}
+
+            <h3 style={{ marginTop: 14 }}>Financing fees @ asking</h3>
             <KV
-              items={[
-                ['Cash profit @ asking', money(flip.scenarios.cash.atAsking)],
-                ['Meets min / target', `${flip.meetsMin ? 'min ✓' : 'min ✗'} · ${flip.meetsTarget ? 'target ✓' : 'target ✗'}`],
-              ]}
+              items={FINANCINGS.map(([fin, label]) => [
+                label,
+                money((flip.scenarios[fin].feesAtAsking || {}).total),
+              ])}
             />
+
             <h3 style={{ marginTop: 14 }}>Flip cost line items</h3>
             <KV
               items={[
@@ -340,53 +395,53 @@ export default function DealUnderwriter() {
                 ['Total sell costs', money(flip.sellCosts)],
               ]}
             />
-            <h3 style={{ marginTop: 14 }}>Profit by offer point × financing</h3>
-            <div className="lead-table-wrap">
-              <table className="lead-table">
-                <thead>
-                  <tr>
-                    <th>Offer point</th>
-                    {FINANCINGS.map(([k, label]) => <th key={k}>{label}</th>)}
-                  </tr>
-                </thead>
-                <tbody>
-                  {OFFER_POINTS.map(([, scKey, label]) => (
-                    <tr key={scKey}>
-                      <td className="cell-owner">{label}</td>
-                      {FINANCINGS.map(([fin]) => (
-                        <td className="cell-num" key={fin}>
-                          {money(flip.scenarios[fin][scKey])}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                  <tr>
-                    <td className="cell-owner">Fees @ asking</td>
-                    {FINANCINGS.map(([fin]) => {
-                      const f = flip.scenarios[fin].feesAtAsking || {}
-                      return (
-                        <td className="cell-num" key={fin}>
-                          {money(f.total)}
-                        </td>
-                      )
-                    })}
-                  </tr>
-                </tbody>
-              </table>
-            </div>
           </div>
 
           <div className="da-section">
             <h3>Wholesale &nbsp;<Go v={ws.go} /></h3>
+
+            <h3 style={{ marginTop: 4 }}>Offer → assignment profit</h3>
+            <div className="lead-table-wrap">
+              <table className="lead-table">
+                <thead>
+                  <tr>
+                    <th>Offer tier</th>
+                    <th>Offer $</th>
+                    <th>Assignment profit</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {OFFER_TIERS.map(([ladderKey, scKey, label]) => (
+                    <tr key={scKey}>
+                      <td className="cell-owner">{label}</td>
+                      <td className="cell-num">{money(ladder[ladderKey])}</td>
+                      <td className="cell-num">{money(ws[scKey])}</td>
+                    </tr>
+                  ))}
+                  <tr>
+                    <td className="cell-owner">Asking Price</td>
+                    <td className="cell-num">{money(result.inputs.askingPrice)}</td>
+                    <td className="cell-num">{money(ws.atAsking)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p className={`da-status ${ws.atAsking >= 10000 ? 'go-yes' : 'go-no'}`}>
+              {ws.atAsking >= 10000 ? '✓ Meets $10K wholesale min' : '✗ Below $10K wholesale min'}
+              {' '}
+              <span style={{ color: 'var(--text-dim)', fontWeight: 400 }}>
+                (assignment profit at asking {money(ws.atAsking)})
+              </span>
+            </p>
+
+            <h3 style={{ marginTop: 14 }}>Wholesale detail</h3>
             <KV
               items={[
                 ['Sell price (MAO to end buyer)', money(ws.sellPrice)],
-                ['Assignment profit @ asking', money(ws.atAsking)],
                 ['Double-close @ asking', money(ws.doubleCloseAtAsking)],
                 ['Buy-side title fee if double-close', money(ws.buyTitleFeeIfDoubleClose)],
                 ['End-buyer profit', money(ws.endBuyerProfit)],
                 ['TC fee', money(ws.tcFee)],
-                ['@ MAO / @ Opening', `${money(ws.atMAO)} / ${money(ws.atOpening)}`],
               ]}
             />
           </div>
