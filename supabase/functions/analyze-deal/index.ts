@@ -1,26 +1,22 @@
-// index.ts — analyze-deal Edge Function
-//
-// Called from the portal's Deal Analyzer page using the anon key (standard
-// Supabase Functions invocation auth — verify_jwt=true means the caller
-// must be a logged-in or anon Supabase client, same as any other request).
-// Internally this function uses the SERVICE ROLE key to write to
-// deal_analyses, bypassing RLS — that key is a Supabase-managed environment
-// variable automatically available inside every Edge Function, injected by
-// the platform itself. It is never sent to or visible from the browser.
-//
-// This is the correct pattern: browser computes nothing sensitive and
-// never holds a privileged key; the server-side function is the only thing
-// that can write to deal_analyses.
-
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { underwriteDeal } from "./underwritingEngine.ts";
 
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
 Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: CORS });
+  }
+
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Use POST" }), {
       status: 405,
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...CORS },
     });
   }
 
@@ -30,7 +26,7 @@ Deno.serve(async (req: Request) => {
   } catch {
     return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
       status: 400,
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...CORS },
     });
   }
 
@@ -39,7 +35,7 @@ Deno.serve(async (req: Request) => {
   if (arv == null || rehab == null || askingPrice == null || !city) {
     return new Response(
       JSON.stringify({ error: "arv, rehab, askingPrice, and city are required." }),
-      { status: 400, headers: { "Content-Type": "application/json" } }
+      { status: 400, headers: { "Content-Type": "application/json", ...CORS } }
     );
   }
 
@@ -49,7 +45,7 @@ Deno.serve(async (req: Request) => {
   } catch (e) {
     return new Response(JSON.stringify({ error: String(e) }), {
       status: 400,
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...CORS },
     });
   }
 
@@ -86,7 +82,7 @@ Deno.serve(async (req: Request) => {
     if (error) {
       return new Response(JSON.stringify({ error: error.message, result }), {
         status: 500,
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...CORS },
       });
     }
     savedRow = data;
@@ -94,6 +90,6 @@ Deno.serve(async (req: Request) => {
 
   return new Response(JSON.stringify({ result, saved: savedRow }), {
     status: 200,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...CORS },
   });
 });
