@@ -1,0 +1,11 @@
+{
+  "name": "lead-scoring",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "description": "PropFlowREI deterministic lead-scoring engine. CommonJS island inside the ESM app (this package.json overrides the root \"type\": \"module\").",
+  "main": "scoringEngine.js",
+  "scripts": {
+    "test": "node test-scoringEngine.js"
+  }
+}
