@@ -810,3 +810,119 @@ input:focus {
   justify-content: space-between;
   margin-bottom: 10px;
 }
+
+/* ---------- Deal Analyzer ---------- */
+.da-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.da-form {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px 16px;
+  align-items: end;
+}
+
+.da-form .field {
+  margin-bottom: 0;
+}
+
+.da-form input[type='text'],
+.da-form input[type='number'] {
+  width: 100%;
+}
+
+.da-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+  padding-bottom: 10px;
+}
+
+.da-check input {
+  width: auto;
+}
+
+.da-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.da-section {
+  margin-top: 6px;
+}
+
+.da-section h3 {
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+}
+
+.da-result-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.da-rec {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px 18px;
+  font-size: 13px;
+}
+
+.kv > div {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.kv .k {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.kv .v {
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.go-yes {
+  color: #22c55e;
+  font-weight: 700;
+}
+.go-no {
+  color: var(--text-dim);
+  font-weight: 700;
+}
+
+.da-saved-note {
+  font-size: 13px;
+  color: #22c55e;
+}
+
+.da-form .field > span {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
