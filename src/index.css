@@ -926,3 +926,27 @@ input:focus {
   color: var(--text-muted);
   margin-bottom: 6px;
 }
+
+.da-form select {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  outline: none;
+  color: var(--text);
+}
+.da-form select:focus {
+  border-color: var(--accent);
+}
+.da-form input:disabled,
+.da-form select:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.da-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  justify-content: flex-end;
+}

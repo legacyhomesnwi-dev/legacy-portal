@@ -11,7 +11,7 @@
 //   Offer ladder (% of MAO): LAO=60%, Tier2=62.5%, Opening=65%, Tier4=70%
 //   MAO = ARV × 75% - rehab
 
-const { getBuyBoxCeiling } = require('./buyBoxConfig');
+const { getBuyBoxInfo } = require('./buyBoxConfig');
 
 const ENGINE_VERSION = 'v1.0.0-extracted-from-dealunderwriter-v7-final';
 
@@ -61,6 +61,37 @@ const RENTAL_EXPENSE_RATIO = 0.45;
 const WHOLESALE_ASSIGNMENT_TARGET = 25000; // reference target, not a hard input
 const WHOLESALE_REHAB_DISCOUNT = 0.90; // buyer's rehab estimate, 10% off standard
 const END_BUYER_SELL_COST_PCT = 0.055;
+
+// ---------------------------------------------------------------------------
+// Rehab-by-condition calculator — the piece that was missing from the
+// original extraction. Matches DealUnderwriter v7 FINAL's 7-tier scale
+// exactly (verified from chat history, confirmed locked parameters).
+// ---------------------------------------------------------------------------
+const CONDITIONS = [
+  { label: 'Turnkey', value: 'turnkey', costPerSqft: 7.50 },
+  { label: 'Cosmetic', value: 'cosmetic', costPerSqft: 12.50 },
+  { label: 'Light', value: 'light', costPerSqft: 25.00 },
+  { label: 'Moderate', value: 'moderate', costPerSqft: 35.00 },
+  { label: 'Extensive', value: 'extensive', costPerSqft: 40.00 },
+  { label: 'Heavy', value: 'heavy', costPerSqft: 45.00 },
+  { label: 'Complete Gut / Rebuild', value: 'gut', costPerSqft: 50.00 },
+];
+
+function calcRehabFromCondition({ sqft, condition, rehabOverride }) {
+  if (rehabOverride != null && rehabOverride !== '') {
+    return { rehab: parseFloat(rehabOverride), source: 'override' };
+  }
+  const conditionObj = CONDITIONS.find((c) => c.value === condition);
+  if (!conditionObj) {
+    throw new Error(
+      `Unknown condition "${condition}". Must be one of: ${CONDITIONS.map((c) => c.value).join(', ')}`
+    );
+  }
+  if (sqft == null) {
+    throw new Error('sqft is required when rehab is not directly provided or overridden.');
+  }
+  return { rehab: sqft * conditionObj.costPerSqft, source: 'condition', costPerSqft: conditionObj.costPerSqft };
+}
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -119,9 +150,9 @@ function calcOfferLadder(arv, rehab) {
   };
 }
 
-function dealStatus(askingPrice, mao, flexCeiling) {
+function dealStatus(askingPrice, mao, flexCeiling, allowFlex = false) {
   if (askingPrice <= mao) return 'strong';
-  if (askingPrice <= flexCeiling) return 'flex';
+  if (allowFlex && askingPrice <= flexCeiling) return 'flex';
   return 'nogo';
 }
 
@@ -130,6 +161,8 @@ function dealStatus(askingPrice, mao, flexCeiling) {
 // ---------------------------------------------------------------------------
 function calcFlip({ arv, rehab, askingPrice, city, ladder, status }) {
   const sellCosts = flipSellCosts(arv);
+  const sellTitleFee = sellTitleTotal(arv);
+  const commissionAndConcessions = sellCosts - sellTitleFee; // 5% + 1%
 
   const profitAt = (purchasePrice, financing) => {
     const hm = financing === 'hardMoney' ? hardMoneyCosts(purchasePrice) : null;
@@ -141,6 +174,7 @@ function calcFlip({ arv, rehab, askingPrice, city, ladder, status }) {
 
   const scenarios = {};
   for (const financing of ['cash', 'hardMoney', 'creditLine']) {
+    const feeBreakdown = financing === 'hardMoney' ? hardMoneyCosts(askingPrice) : financing === 'creditLine' ? creditLineCosts(askingPrice) : cashCosts();
     scenarios[financing] = {
       atLAO: profitAt(ladder.lao, financing),
       atTier2: profitAt(ladder.tier2, financing),
@@ -148,21 +182,25 @@ function calcFlip({ arv, rehab, askingPrice, city, ladder, status }) {
       atTier4: profitAt(ladder.tier4, financing),
       atMAO: profitAt(ladder.mao, financing),
       atAsking: profitAt(askingPrice, financing),
+      feesAtAsking: feeBreakdown, // buyTitle + (origination/interest/fee if financed)
     };
   }
 
-  const buyBox = getBuyBoxCeiling(city);
-  const inBuyBox = askingPrice <= buyBox.maxAskingPrice;
+  const buyBox = getBuyBoxInfo(city);
+  const inBuyBox = buyBox.inServiceArea;
   const cashProfitAtAsking = scenarios.cash.atAsking;
 
   return {
     sellCosts,
+    sellTitleFee,
+    commissionAndConcessions,
+    buyTitleFee: TITLE.buy,
+    carryTotal: CARRY_TOTAL,
     scenarios,
     meetsMin: cashProfitAtAsking >= FLIP_MIN,
     meetsTarget: cashProfitAtAsking >= FLIP_TARGET,
     inBuyBox,
-    buyBoxCeiling: buyBox.maxAskingPrice,
-    buyBoxCalibration: buyBox.calibration,
+    county: buyBox.county,
     go: cashProfitAtAsking >= FLIP_MIN && status !== 'nogo' && inBuyBox,
   };
 }
@@ -187,8 +225,8 @@ function calcWholesale({ arv, rehab, askingPrice, city, isMLS, ladder, status })
   const atAsking = profitAt(askingPrice);
   const doubleCloseAtAsking = atAsking - TITLE.buy; // if assignment isn't possible
 
-  const buyBox = getBuyBoxCeiling(city);
-  const inBuyBox = askingPrice <= buyBox.maxAskingPrice;
+  const buyBox = getBuyBoxInfo(city);
+  const inBuyBox = buyBox.inServiceArea;
 
   return {
     wsRehab,
@@ -196,6 +234,7 @@ function calcWholesale({ arv, rehab, askingPrice, city, isMLS, ladder, status })
     endBuyerAllIn,
     endBuyerProfit,
     tcFee,
+    buyTitleFeeIfDoubleClose: TITLE.buy,
     atLAO: profitAt(ladder.lao),
     atTier2: profitAt(ladder.tier2),
     atOpening: profitAt(ladder.opening),
@@ -204,7 +243,7 @@ function calcWholesale({ arv, rehab, askingPrice, city, isMLS, ladder, status })
     atAsking,
     doubleCloseAtAsking,
     inBuyBox,
-    buyBoxCeiling: buyBox.maxAskingPrice,
+    county: buyBox.county,
     go: atAsking >= WHOLESALE_MIN && status !== 'nogo' && inBuyBox,
   };
 }
@@ -239,6 +278,10 @@ function calcBRRRR({ arv, rehab, askingPrice, monthlyRent }) {
     allIn,
     refiLoan,
     refiCosts,
+    buyTitleFee: TITLE.buy,
+    refiTitleFee: TITLE.refi,
+    refiOrigination,
+    appraisalFee: BRRRR_APPRAISAL_FEE,
     monthlyMortgage,
     monthlyExpenses,
     monthlyCashFlow,
@@ -254,14 +297,30 @@ function calcBRRRR({ arv, rehab, askingPrice, monthlyRent }) {
 // Main entry point — runs all three strategies simultaneously
 // ---------------------------------------------------------------------------
 function underwriteDeal(input) {
-  const { arv, rehab, askingPrice, city, isMLS = false, monthlyRent = null } = input;
+  const { arv, askingPrice, city, isMLS = false, monthlyRent = null, allowFlex = false, propertyAddress = null } = input;
+  let { rehab } = input;
+
+  // Accept either a direct rehab dollar amount, OR sqft + condition (with
+  // optional override) — matches how the original tool actually works.
+  let rehabDetail = null;
+  if (rehab == null) {
+    rehabDetail = calcRehabFromCondition({
+      sqft: input.sqft,
+      condition: input.condition,
+      rehabOverride: input.rehabOverride,
+    });
+    rehab = rehabDetail.rehab;
+  }
 
   if (arv == null || rehab == null || askingPrice == null || !city) {
-    throw new Error('underwriteDeal requires arv, rehab, askingPrice, and city at minimum.');
+    throw new Error('underwriteDeal requires arv, rehab (or sqft+condition), askingPrice, and city at minimum.');
   }
 
   const ladder = calcOfferLadder(arv, rehab);
-  const status = dealStatus(askingPrice, ladder.mao, ladder.flexCeiling);
+  // Flex (80% ARV) tier is NEVER applied automatically -- it only activates
+  // when allowFlex is explicitly passed true (Justin's manual override).
+  // Default behavior is strictly MAO (75% ARV) or nogo, nothing in between.
+  const status = dealStatus(askingPrice, ladder.mao, ladder.flexCeiling, allowFlex);
 
   const flip = calcFlip({ arv, rehab, askingPrice, city, ladder, status });
   const wholesale = calcWholesale({ arv, rehab, askingPrice, city, isMLS, ladder, status });
@@ -283,7 +342,8 @@ function underwriteDeal(input) {
       : 'none — no strategy clears its minimum';
 
   return {
-    inputs: { arv, rehab, askingPrice, city, isMLS, monthlyRent },
+    inputs: { arv, rehab, askingPrice, city, isMLS, monthlyRent, propertyAddress, allowFlex },
+    rehabDetail,
     dealStatus: status,
     offerLadder: ladder,
     strategies,
@@ -298,11 +358,13 @@ module.exports = {
   calcFlip,
   calcWholesale,
   calcBRRRR,
+  calcRehabFromCondition,
   dealStatus,
   flipSellCosts,
   hardMoneyCosts,
   creditLineCosts,
   sellTitleTotal,
+  CONDITIONS,
   ENGINE_VERSION,
   // Constants exported for transparency/testing, not for callers to mutate
   CONSTANTS: {

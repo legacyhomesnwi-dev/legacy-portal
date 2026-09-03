@@ -18,7 +18,7 @@ const deals = [
   },
   {
     label: '2) Merrillville flip — clears min but not target',
-    input: { arv: 160000, rehab: 30000, askingPrice: 85000, city: 'Merrillville', isMLS: false },
+    input: { arv: 160000, rehab: 30000, askingPrice: 75000, city: 'Merrillville', isMLS: false },
   },
   {
     label: '3) Crown Point — asking above flex ceiling (NO-GO)',
@@ -29,8 +29,12 @@ const deals = [
     input: { arv: 150000, rehab: 20000, askingPrice: 55000, city: 'East Chicago', isMLS: false },
   },
   {
-    label: '5) Gary asking OVER buy box ceiling ($115K) — should fail inBuyBox even if profitable',
-    input: { arv: 220000, rehab: 15000, askingPrice: 125000, city: 'Gary', isMLS: false },
+    label: '5) Cedar Lake — outside old ceiling logic, now just checks county membership',
+    input: { arv: 220000, rehab: 15000, askingPrice: 125000, city: 'Cedar Lake', isMLS: false },
+  },
+  {
+    label: '5b) Chicago (NOT Lake or Porter County) — should fail inBuyBox regardless of profit',
+    input: { arv: 220000, rehab: 15000, askingPrice: 60000, city: 'Chicago', isMLS: false },
   },
   {
     label: '6) BRRRR — Hammond rental with monthly rent supplied',
@@ -47,7 +51,7 @@ for (const { label, input } of deals) {
   console.log(label);
   console.log(`  Deal status: ${result.dealStatus} | Recommended: ${result.recommendedStrategy}`);
   console.log(
-    `  Flip: go=${result.strategies.flip.go} meetsMin=${result.strategies.flip.meetsMin} meetsTarget=${result.strategies.flip.meetsTarget} inBuyBox=${result.strategies.flip.inBuyBox} (ceiling $${result.strategies.flip.buyBoxCeiling}, ${result.strategies.flip.buyBoxCalibration})`
+    `  Flip: go=${result.strategies.flip.go} meetsMin=${result.strategies.flip.meetsMin} meetsTarget=${result.strategies.flip.meetsTarget} inBuyBox=${result.strategies.flip.inBuyBox} (county: ${result.strategies.flip.county})`
   );
   console.log(`    Cash profit at asking: $${result.strategies.flip.scenarios.cash.atAsking.toFixed(0)}`);
   console.log(

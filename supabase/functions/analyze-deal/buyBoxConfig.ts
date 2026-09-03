@@ -1,26 +1,24 @@
-// buyBoxConfig.ts — ESM port of src/underwriting/buyBoxConfig.js for Deno.
-// Same data, same honest gap: only Gary and Cedar Lake are confirmed real
-// numbers, everything else is a provisional interpolation. Keep this in
-// sync manually with the Node version until there's a shared package.
+// buyBoxConfig.ts — ESM port. No price ceiling per Justin's direction —
+// pure geographic check against real Lake/Porter County municipality lists
+// (sourced from portercountyin.gov and verified county records).
 
-export const BUY_BOX: Record<string, { maxAskingPrice: number; calibration: string }> = {
-  gary: { maxAskingPrice: 115000, calibration: 'confirmed' },
-  'cedar lake': { maxAskingPrice: 325000, calibration: 'confirmed' },
+const LAKE_COUNTY_CITIES = [
+  'gary', 'hammond', 'east chicago', 'hobart', 'lake station', 'whiting',
+  'cedar lake', 'dyer', 'griffith', 'highland', 'lowell', 'merrillville',
+  'munster', 'new chicago', 'schererville', 'schneider', 'st. john',
+  'st john', 'winfield', 'crown point',
+];
 
-  hammond: { maxAskingPrice: 120000, calibration: 'provisional' },
-  'east chicago': { maxAskingPrice: 125000, calibration: 'provisional' },
-  merrillville: { maxAskingPrice: 180000, calibration: 'provisional' },
-  portage: { maxAskingPrice: 190000, calibration: 'provisional' },
-  highland: { maxAskingPrice: 210000, calibration: 'provisional' },
-  valparaiso: { maxAskingPrice: 240000, calibration: 'provisional' },
-  chesterton: { maxAskingPrice: 250000, calibration: 'provisional' },
-  munster: { maxAskingPrice: 270000, calibration: 'provisional' },
-  'crown point': { maxAskingPrice: 280000, calibration: 'provisional' },
-};
+const PORTER_COUNTY_CITIES = [
+  'beverly shores', 'burns harbor', 'chesterton', 'dune acres', 'hebron',
+  'kouts', 'ogden dunes', 'pines', 'town of pines', 'portage', 'porter',
+  'valparaiso',
+];
 
-const FALLBACK = { maxAskingPrice: 150000, calibration: 'unclassified' };
-
-export function getBuyBoxCeiling(city: string | undefined) {
+export function getBuyBoxInfo(city: string | undefined) {
   const normalized = (city || '').trim().toLowerCase();
-  return BUY_BOX[normalized] || FALLBACK;
+  if (LAKE_COUNTY_CITIES.includes(normalized)) return { inServiceArea: true, county: 'Lake' };
+  if (PORTER_COUNTY_CITIES.includes(normalized)) return { inServiceArea: true, county: 'Porter' };
+  return { inServiceArea: false, county: null };
 }
+

@@ -1,3 +1,13 @@
+// index.ts — analyze-deal Edge Function
+//
+// Called from the portal's Deal Analyzer page using the anon key (standard
+// Supabase Functions invocation auth — verify_jwt=true means the caller
+// must be a logged-in or anon Supabase client, same as any other request).
+// Internally this function uses the SERVICE ROLE key to write to
+// deal_analyses, bypassing RLS — that key is a Supabase-managed environment
+// variable automatically available inside every Edge Function, injected by
+// the platform itself. It is never sent to or visible from the browser.
+
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { underwriteDeal } from "./underwritingEngine.ts";
@@ -30,18 +40,25 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  const { arv, rehab, askingPrice, city, isMLS, monthlyRent, propertyId, persist } = body;
+  const {
+    arv, rehab, sqft, condition, rehabOverride, askingPrice, city, isMLS,
+    monthlyRent, allowFlex, propertyAddress, propertyId, persist,
+  } = body;
 
-  if (arv == null || rehab == null || askingPrice == null || !city) {
+  if (arv == null || (rehab == null && (sqft == null || !condition)) || askingPrice == null || !city) {
     return new Response(
-      JSON.stringify({ error: "arv, rehab, askingPrice, and city are required." }),
+      JSON.stringify({ error: "arv, askingPrice, city, and either rehab OR (sqft + condition) are required." }),
       { status: 400, headers: { "Content-Type": "application/json", ...CORS } }
     );
   }
 
   let result;
   try {
-    result = underwriteDeal({ arv, rehab, askingPrice, city, isMLS: !!isMLS, monthlyRent: monthlyRent ?? null });
+    result = underwriteDeal({
+      arv, rehab, sqft, condition, rehabOverride,
+      askingPrice, city, isMLS: !!isMLS, monthlyRent: monthlyRent ?? null,
+      allowFlex: !!allowFlex, propertyAddress: propertyAddress ?? null,
+    });
   } catch (e) {
     return new Response(JSON.stringify({ error: String(e) }), {
       status: 400,
@@ -49,9 +66,6 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  // Only persist if explicitly requested — lets the Deal Analyzer page do
-  // quick "what-if" scenario exploration without writing a row every
-  // keystroke, and only save when the user actually wants a record kept.
   let savedRow = null;
   if (persist) {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -62,12 +76,14 @@ Deno.serve(async (req: Request) => {
       .from("deal_analyses")
       .insert({
         property_id: propertyId ?? null,
+        property_address: propertyAddress ?? null,
         arv,
-        rehab,
+        rehab: result.inputs.rehab,
         asking_price: askingPrice,
         city,
         is_mls: !!isMLS,
         monthly_rent: monthlyRent ?? null,
+        allow_flex: !!allowFlex,
         deal_status: result.dealStatus,
         recommended_strategy: result.recommendedStrategy,
         offer_ladder: result.offerLadder,
@@ -93,3 +109,4 @@ Deno.serve(async (req: Request) => {
     headers: { "Content-Type": "application/json", ...CORS },
   });
 });
+

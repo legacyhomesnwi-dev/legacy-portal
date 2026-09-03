@@ -1,14 +1,41 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 
-// Buy-box cities (from the edge function's buyBoxConfig). Free text is allowed —
-// anything not listed falls back to the unclassified tier server-side.
+// 30 Lake + Porter County municipalities (matches buyBoxConfig — geographic
+// service-area check, no price ceiling).
 const CITIES = [
-  'Gary', 'Hammond', 'East Chicago', 'Merrillville', 'Portage', 'Highland',
-  'Valparaiso', 'Chesterton', 'Munster', 'Crown Point', 'Cedar Lake',
+  'Gary', 'Hammond', 'East Chicago', 'Hobart', 'Lake Station', 'Whiting',
+  'Cedar Lake', 'Dyer', 'Griffith', 'Highland', 'Lowell', 'Merrillville',
+  'Munster', 'New Chicago', 'Schererville', 'Schneider', 'St. John', 'Winfield',
+  'Crown Point', 'Beverly Shores', 'Burns Harbor', 'Chesterton', 'Dune Acres',
+  'Hebron', 'Kouts', 'Ogden Dunes', 'Pines', 'Portage', 'Porter', 'Valparaiso',
+]
+
+// 7-tier rehab-by-condition scale (matches engine CONDITIONS).
+const CONDITIONS = [
+  { value: 'turnkey', label: 'Turnkey — $7.50/sqft' },
+  { value: 'cosmetic', label: 'Cosmetic — $12.50/sqft' },
+  { value: 'light', label: 'Light — $25/sqft' },
+  { value: 'moderate', label: 'Moderate — $35/sqft' },
+  { value: 'extensive', label: 'Extensive — $40/sqft' },
+  { value: 'heavy', label: 'Heavy — $45/sqft' },
+  { value: 'gut', label: 'Complete Gut / Rebuild — $50/sqft' },
 ]
 
 const DEAL_STATUS_CLS = { strong: 'temp-warm', flex: 'temp-nurture', nogo: 'temp-fire' }
+const FINANCINGS = [
+  ['cash', 'Cash'],
+  ['hardMoney', 'Hard Money'],
+  ['creditLine', 'Credit Line'],
+]
+const OFFER_POINTS = [
+  ['lao', 'atLAO', 'LAO (60%)'],
+  ['tier2', 'atTier2', 'Tier 2 (62.5%)'],
+  ['opening', 'atOpening', 'Opening (65%)'],
+  ['tier4', 'atTier4', 'Tier 4 (70%)'],
+  ['mao', 'atMAO', 'MAO (75%)'],
+  ['asking', 'atAsking', 'Asking'],
+]
 
 function money(n) {
   if (n == null || n === '' || Number.isNaN(Number(n))) return '—'
@@ -17,8 +44,24 @@ function money(n) {
 function Go({ v }) {
   return <span className={v ? 'go-yes' : 'go-no'}>{v ? 'GO' : 'no'}</span>
 }
+function KV({ items }) {
+  return (
+    <div className="kv">
+      {items.map(([k, v]) => (
+        <div key={k}>
+          <span className="k">{k}</span>
+          <span className="v">{v}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
 
-const BLANK = { arv: '', rehab: '', askingPrice: '', city: 'Gary', isMLS: false, monthlyRent: '' }
+const BLANK = {
+  propertyAddress: '', arv: '', askingPrice: '', city: 'Gary',
+  rehab: '', sqft: '', condition: '', rehabOverride: '',
+  monthlyRent: '', isMLS: false, allowFlex: false,
+}
 
 export default function DealUnderwriter() {
   const [form, setForm] = useState(BLANK)
@@ -31,27 +74,42 @@ export default function DealUnderwriter() {
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
 
-  // Build the edge-function body from the form (numbers coerced, blanks dropped).
   const buildBody = useCallback(
     (persist) => {
       const body = {
+        propertyAddress: form.propertyAddress.trim() || null,
         arv: Number(form.arv),
-        rehab: Number(form.rehab),
         askingPrice: Number(form.askingPrice),
         city: form.city.trim(),
         isMLS: !!form.isMLS,
+        allowFlex: !!form.allowFlex,
         persist,
       }
-      if (form.monthlyRent !== '' && !Number.isNaN(Number(form.monthlyRent))) {
-        body.monthlyRent = Number(form.monthlyRent)
-      }
+      const numIf = (v) => (v !== '' && !Number.isNaN(Number(v)) ? Number(v) : undefined)
+      if (numIf(form.rehab) !== undefined) body.rehab = numIf(form.rehab)
+      if (numIf(form.sqft) !== undefined) body.sqft = numIf(form.sqft)
+      if (form.condition) body.condition = form.condition
+      if (numIf(form.rehabOverride) !== undefined) body.rehabOverride = numIf(form.rehabOverride)
+      if (numIf(form.monthlyRent) !== undefined) body.monthlyRent = numIf(form.monthlyRent)
       return body
     },
     [form]
   )
 
+  // Same rule the edge function enforces.
+  const hasRehab =
+    form.rehab !== '' || (form.sqft !== '' && form.condition !== '')
   const formValid =
-    form.arv !== '' && form.rehab !== '' && form.askingPrice !== '' && form.city.trim() !== ''
+    form.arv !== '' && form.askingPrice !== '' && form.city.trim() !== '' && hasRehab
+
+  async function invoke(persist) {
+    const { data, error: fnErr } = await supabase.functions.invoke('analyze-deal', {
+      body: buildBody(persist),
+    })
+    if (fnErr) throw new Error(fnErr.message || 'Edge function call failed')
+    if (data?.error) throw new Error(data.error)
+    return data
+  }
 
   async function analyze(e) {
     e?.preventDefault()
@@ -59,45 +117,38 @@ export default function DealUnderwriter() {
     setLoading(true)
     setError('')
     setSavedNote('')
-    const { data, error: fnErr } = await supabase.functions.invoke('analyze-deal', {
-      body: buildBody(false),
-    })
-    setLoading(false)
-    if (fnErr) {
-      setError(fnErr.message || 'Edge function call failed')
+    try {
+      const data = await invoke(false)
+      setResult(data.result)
+    } catch (err) {
+      setError(err.message)
       setResult(null)
-      return
+    } finally {
+      setLoading(false)
     }
-    if (data?.error) {
-      setError(data.error)
-      setResult(null)
-      return
-    }
-    setResult(data.result)
   }
 
   async function save() {
     if (!result) return
     setSaving(true)
     setError('')
-    const { data, error: fnErr } = await supabase.functions.invoke('analyze-deal', {
-      body: buildBody(true),
-    })
-    setSaving(false)
-    if (fnErr || data?.error) {
-      setError(fnErr?.message || data?.error || 'Save failed')
-      return
+    try {
+      const data = await invoke(true)
+      setResult(data.result)
+      setSavedNote(`Saved — deal_analyses row ${data.saved?.id?.slice(0, 8)}…`)
+      fetchSaved()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
     }
-    setResult(data.result)
-    setSavedNote(`Saved — deal_analyses row ${data.saved?.id?.slice(0, 8)}…`)
-    fetchSaved()
   }
 
   const fetchSaved = useCallback(async () => {
     const { data, error: qErr } = await supabase
       .from('deal_analyses')
       .select(
-        'id, property_id, city, arv, rehab, asking_price, is_mls, deal_status, recommended_strategy, engine_version, analyzed_at'
+        'id, property_address, city, arv, rehab, asking_price, is_mls, allow_flex, deal_status, recommended_strategy, engine_version, analyzed_at'
       )
       .order('analyzed_at', { ascending: false })
     if (!qErr) setSavedRows(data || [])
@@ -122,18 +173,19 @@ export default function DealUnderwriter() {
   const flip = result?.strategies?.flip
   const ws = result?.strategies?.wholesale
   const brrrr = result?.strategies?.brrrr
+  const rd = result?.rehabDetail
 
-  const ladderRows = useMemo(
+  const ladderItems = useMemo(
     () =>
       ladder
         ? [
-            ['MAO (75% ARV − rehab)', ladder.mao],
-            ['Flex MAO (80% ARV − rehab)', ladder.flexMAO],
-            ['Flex ceiling (+$5k)', ladder.flexCeiling],
-            ['LAO — 60% of MAO', ladder.lao],
-            ['Tier 2 — 62.5%', ladder.tier2],
-            ['Opening — 65%', ladder.opening],
-            ['Tier 4 — 70%', ladder.tier4],
+            ['MAO (75% ARV − rehab)', money(ladder.mao)],
+            ['Flex MAO (80% ARV − rehab)', money(ladder.flexMAO)],
+            ['Flex ceiling (+$5k)', money(ladder.flexCeiling)],
+            ['LAO — 60% of MAO', money(ladder.lao)],
+            ['Tier 2 — 62.5%', money(ladder.tier2)],
+            ['Opening — 65%', money(ladder.opening)],
+            ['Tier 4 — 70%', money(ladder.tier4)],
           ]
         : [],
     [ladder]
@@ -144,68 +196,78 @@ export default function DealUnderwriter() {
       {/* ---------- Input form ---------- */}
       <form className="card" onSubmit={analyze}>
         <div className="da-form">
-          <label className="field">
-            <span>ARV</span>
+          <label className="field" style={{ gridColumn: '1 / -1' }}>
+            <span>Property address (optional)</span>
             <input
-              type="number"
-              inputMode="numeric"
-              value={form.arv}
-              onChange={(e) => set('arv', e.target.value)}
-              placeholder="180000"
+              type="text"
+              value={form.propertyAddress}
+              onChange={(e) => set('propertyAddress', e.target.value)}
+              placeholder="1523 Adams St, Gary, IN 46407"
             />
           </label>
+
           <label className="field">
-            <span>Rehab</span>
-            <input
-              type="number"
-              inputMode="numeric"
-              value={form.rehab}
-              onChange={(e) => set('rehab', e.target.value)}
-              placeholder="25000"
-            />
+            <span>ARV</span>
+            <input type="number" inputMode="numeric" value={form.arv}
+              onChange={(e) => set('arv', e.target.value)} placeholder="180000" />
           </label>
           <label className="field">
             <span>Asking price</span>
-            <input
-              type="number"
-              inputMode="numeric"
-              value={form.askingPrice}
-              onChange={(e) => set('askingPrice', e.target.value)}
-              placeholder="60000"
-            />
+            <input type="number" inputMode="numeric" value={form.askingPrice}
+              onChange={(e) => set('askingPrice', e.target.value)} placeholder="60000" />
           </label>
           <label className="field">
             <span>City</span>
-            <input
-              type="text"
-              list="da-cities"
-              value={form.city}
-              onChange={(e) => set('city', e.target.value)}
-            />
+            <input type="text" list="da-cities" value={form.city}
+              onChange={(e) => set('city', e.target.value)} />
             <datalist id="da-cities">
-              {CITIES.map((c) => (
-                <option key={c} value={c} />
-              ))}
+              {CITIES.map((c) => <option key={c} value={c} />)}
             </datalist>
+          </label>
+
+          <label className="field">
+            <span>Rehab $ (direct)</span>
+            <input type="number" inputMode="numeric" value={form.rehab}
+              onChange={(e) => set('rehab', e.target.value)} placeholder="25000" />
+          </label>
+          <label className="field">
+            <span>…or Sqft</span>
+            <input type="number" inputMode="numeric" value={form.sqft}
+              onChange={(e) => set('sqft', e.target.value)} placeholder="1200"
+              disabled={form.rehab !== ''} />
+          </label>
+          <label className="field">
+            <span>…and Condition</span>
+            <select value={form.condition} onChange={(e) => set('condition', e.target.value)}
+              disabled={form.rehab !== ''}>
+              <option value="">—</option>
+              {CONDITIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+            </select>
+          </label>
+
+          <label className="field">
+            <span>Rehab override $ (beats sqft+condition)</span>
+            <input type="number" inputMode="numeric" value={form.rehabOverride}
+              onChange={(e) => set('rehabOverride', e.target.value)} placeholder="—"
+              disabled={form.rehab !== ''} />
           </label>
           <label className="field">
             <span>Monthly rent (BRRRR — optional)</span>
-            <input
-              type="number"
-              inputMode="numeric"
-              value={form.monthlyRent}
-              onChange={(e) => set('monthlyRent', e.target.value)}
-              placeholder="1500"
-            />
+            <input type="number" inputMode="numeric" value={form.monthlyRent}
+              onChange={(e) => set('monthlyRent', e.target.value)} placeholder="1500" />
           </label>
-          <label className="da-check">
-            <input
-              type="checkbox"
-              checked={form.isMLS}
-              onChange={(e) => set('isMLS', e.target.checked)}
-            />
-            On-market (MLS) deal
-          </label>
+          <div className="da-checks">
+            <label className="da-check">
+              <input type="checkbox" checked={form.isMLS}
+                onChange={(e) => set('isMLS', e.target.checked)} />
+              On-market (MLS) deal
+            </label>
+            <label className="da-check">
+              <input type="checkbox" checked={form.allowFlex}
+                onChange={(e) => set('allowFlex', e.target.checked)} />
+              Allow flex pricing (80% ARV)
+            </label>
+          </div>
         </div>
 
         <div className="da-actions" style={{ marginTop: 16 }}>
@@ -219,11 +281,7 @@ export default function DealUnderwriter() {
           )}
           {savedNote && <span className="da-saved-note">{savedNote}</span>}
         </div>
-        {error && (
-          <div className="form-error" style={{ marginTop: 14 }}>
-            {error}
-          </div>
-        )}
+        {error && <div className="form-error" style={{ marginTop: 14 }}>{error}</div>}
       </form>
 
       {/* ---------- Result ---------- */}
@@ -234,155 +292,127 @@ export default function DealUnderwriter() {
               {result.dealStatus}
             </span>
             <span className="da-rec">→ {result.recommendedStrategy}</span>
-            <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>
-              {result.engineVersion}
-            </span>
+            {result.inputs?.allowFlex && (
+              <span className="temp temp-nurture">flex pricing allowed</span>
+            )}
+            <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{result.engineVersion}</span>
+          </div>
+
+          <div className="da-section">
+            <h3>Inputs</h3>
+            <KV
+              items={[
+                ['Address', result.inputs.propertyAddress || '—'],
+                ['ARV', money(result.inputs.arv)],
+                ['Asking', money(result.inputs.askingPrice)],
+                ['City', result.inputs.city],
+                [
+                  'Rehab used',
+                  rd
+                    ? `${money(result.inputs.rehab)} (${rd.source}${rd.costPerSqft ? ` @ $${rd.costPerSqft}/sqft` : ''})`
+                    : money(result.inputs.rehab),
+                ],
+                ['Buy box', flip.inBuyBox ? `In service area — ${flip.county} County` : 'Outside Lake/Porter service area'],
+              ]}
+            />
           </div>
 
           <div className="da-section">
             <h3>Offer ladder</h3>
-            <div className="kv">
-              {ladderRows.map(([k, v]) => (
-                <div key={k}>
-                  <span className="k">{k}</span>
-                  <span className="v">{money(v)}</span>
-                </div>
-              ))}
-            </div>
+            <KV items={ladderItems} />
           </div>
 
           <div className="da-section">
-            <h3>
-              Flip &nbsp;<Go v={flip.go} />
-            </h3>
-            <div className="kv" style={{ marginBottom: 12 }}>
-              <div>
-                <span className="k">Cash profit @ asking</span>
-                <span className="v">{money(flip.scenarios.cash.atAsking)}</span>
-              </div>
-              <div>
-                <span className="k">Meets min / target</span>
-                <span className="v">
-                  {flip.meetsMin ? 'min ✓' : 'min ✗'} · {flip.meetsTarget ? 'target ✓' : 'target ✗'}
-                </span>
-              </div>
-              <div>
-                <span className="k">In buy box</span>
-                <span className="v">
-                  {flip.inBuyBox ? 'yes' : 'no'} ({money(flip.buyBoxCeiling)}, {flip.buyBoxCalibration})
-                </span>
-              </div>
-              <div>
-                <span className="k">Sell costs</span>
-                <span className="v">{money(flip.sellCosts)}</span>
-              </div>
-            </div>
+            <h3>Flip &nbsp;<Go v={flip.go} /></h3>
+            <KV
+              items={[
+                ['Cash profit @ asking', money(flip.scenarios.cash.atAsking)],
+                ['Meets min / target', `${flip.meetsMin ? 'min ✓' : 'min ✗'} · ${flip.meetsTarget ? 'target ✓' : 'target ✗'}`],
+              ]}
+            />
+            <h3 style={{ marginTop: 14 }}>Flip cost line items</h3>
+            <KV
+              items={[
+                ['Sell-side title fee', money(flip.sellTitleFee)],
+                ['Buy-side title fee', money(flip.buyTitleFee)],
+                ['Commission + concessions (6%)', money(flip.commissionAndConcessions)],
+                ['Carry total (5.5 mo)', money(flip.carryTotal)],
+                ['Total sell costs', money(flip.sellCosts)],
+              ]}
+            />
+            <h3 style={{ marginTop: 14 }}>Profit by offer point × financing</h3>
             <div className="lead-table-wrap">
               <table className="lead-table">
                 <thead>
                   <tr>
-                    <th>Financing</th>
-                    <th>@ LAO</th>
-                    <th>@ Tier 2</th>
-                    <th>@ Opening</th>
-                    <th>@ Tier 4</th>
-                    <th>@ MAO</th>
-                    <th>@ Asking</th>
+                    <th>Offer point</th>
+                    {FINANCINGS.map(([k, label]) => <th key={k}>{label}</th>)}
                   </tr>
                 </thead>
                 <tbody>
-                  {['cash', 'hardMoney', 'creditLine'].map((fin) => (
-                    <tr key={fin}>
-                      <td className="cell-owner">{fin}</td>
-                      {['atLAO', 'atTier2', 'atOpening', 'atTier4', 'atMAO', 'atAsking'].map((k) => (
-                        <td className="cell-num" key={k}>
-                          {money(flip.scenarios[fin][k])}
+                  {OFFER_POINTS.map(([, scKey, label]) => (
+                    <tr key={scKey}>
+                      <td className="cell-owner">{label}</td>
+                      {FINANCINGS.map(([fin]) => (
+                        <td className="cell-num" key={fin}>
+                          {money(flip.scenarios[fin][scKey])}
                         </td>
                       ))}
                     </tr>
                   ))}
+                  <tr>
+                    <td className="cell-owner">Fees @ asking</td>
+                    {FINANCINGS.map(([fin]) => {
+                      const f = flip.scenarios[fin].feesAtAsking || {}
+                      return (
+                        <td className="cell-num" key={fin}>
+                          {money(f.total)}
+                        </td>
+                      )
+                    })}
+                  </tr>
                 </tbody>
               </table>
             </div>
           </div>
 
           <div className="da-section">
-            <h3>
-              Wholesale &nbsp;<Go v={ws.go} />
-            </h3>
-            <div className="kv">
-              <div>
-                <span className="k">Sell price (MAO to end buyer)</span>
-                <span className="v">{money(ws.sellPrice)}</span>
-              </div>
-              <div>
-                <span className="k">Assignment profit @ asking</span>
-                <span className="v">{money(ws.atAsking)}</span>
-              </div>
-              <div>
-                <span className="k">Double-close @ asking</span>
-                <span className="v">{money(ws.doubleCloseAtAsking)}</span>
-              </div>
-              <div>
-                <span className="k">End-buyer profit</span>
-                <span className="v">{money(ws.endBuyerProfit)}</span>
-              </div>
-              <div>
-                <span className="k">TC fee</span>
-                <span className="v">{money(ws.tcFee)}</span>
-              </div>
-              <div>
-                <span className="k">@ MAO / @ Opening</span>
-                <span className="v">
-                  {money(ws.atMAO)} / {money(ws.atOpening)}
-                </span>
-              </div>
-            </div>
+            <h3>Wholesale &nbsp;<Go v={ws.go} /></h3>
+            <KV
+              items={[
+                ['Sell price (MAO to end buyer)', money(ws.sellPrice)],
+                ['Assignment profit @ asking', money(ws.atAsking)],
+                ['Double-close @ asking', money(ws.doubleCloseAtAsking)],
+                ['Buy-side title fee if double-close', money(ws.buyTitleFeeIfDoubleClose)],
+                ['End-buyer profit', money(ws.endBuyerProfit)],
+                ['TC fee', money(ws.tcFee)],
+                ['@ MAO / @ Opening', `${money(ws.atMAO)} / ${money(ws.atOpening)}`],
+              ]}
+            />
           </div>
 
           <div className="da-section">
-            <h3>
-              BRRRR &nbsp;{brrrr.available ? <Go v={brrrr.go} /> : null}
-            </h3>
+            <h3>BRRRR &nbsp;{brrrr.available ? <Go v={brrrr.go} /> : null}</h3>
             {!brrrr.available ? (
               <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>{brrrr.note}</p>
             ) : (
-              <div className="kv">
-                <div>
-                  <span className="k">All-in</span>
-                  <span className="v">{money(brrrr.allIn)}</span>
-                </div>
-                <div>
-                  <span className="k">Refi loan (75% LTV)</span>
-                  <span className="v">{money(brrrr.refiLoan)}</span>
-                </div>
-                <div>
-                  <span className="k">Refi costs</span>
-                  <span className="v">{money(brrrr.refiCosts)}</span>
-                </div>
-                <div>
-                  <span className="k">Cash out</span>
-                  <span className="v">{money(brrrr.cashOut)}</span>
-                </div>
-                <div>
-                  <span className="k">Monthly mortgage</span>
-                  <span className="v">{money(brrrr.monthlyMortgage)}</span>
-                </div>
-                <div>
-                  <span className="k">Monthly cash flow</span>
-                  <span className="v">{money(brrrr.monthlyCashFlow)}</span>
-                </div>
-                <div>
-                  <span className="k">Annual cash flow</span>
-                  <span className="v">{money(brrrr.annualCashFlow)}</span>
-                </div>
-                <div>
-                  <span className="k">Meets cash-out / cash-flow</span>
-                  <span className="v">
-                    {brrrr.meetsCashOut ? '✓' : '✗'} / {brrrr.meetsCashFlow ? '✓' : '✗'}
-                  </span>
-                </div>
-              </div>
+              <KV
+                items={[
+                  ['All-in', money(brrrr.allIn)],
+                  ['Refi loan (75% LTV)', money(brrrr.refiLoan)],
+                  ['Refi costs (total)', money(brrrr.refiCosts)],
+                  ['Buy-side title fee', money(brrrr.buyTitleFee)],
+                  ['Refi title fee', money(brrrr.refiTitleFee)],
+                  ['Refi origination', money(brrrr.refiOrigination)],
+                  ['Appraisal fee', money(brrrr.appraisalFee)],
+                  ['Monthly mortgage', money(brrrr.monthlyMortgage)],
+                  ['Monthly expenses', money(brrrr.monthlyExpenses)],
+                  ['Monthly cash flow', money(brrrr.monthlyCashFlow)],
+                  ['Annual cash flow', money(brrrr.annualCashFlow)],
+                  ['Cash out', money(brrrr.cashOut)],
+                  ['Meets cash-out / cash-flow', `${brrrr.meetsCashOut ? '✓' : '✗'} / ${brrrr.meetsCashFlow ? '✓' : '✗'}`],
+                ]}
+              />
             )}
           </div>
         </div>
@@ -392,19 +422,19 @@ export default function DealUnderwriter() {
       <div className="da-section">
         <h3>Saved analyses ({savedRows.length})</h3>
         {savedRows.length === 0 ? (
-          <div className="empty">
-            <span>No saved analyses yet.</span>
-          </div>
+          <div className="empty"><span>No saved analyses yet.</span></div>
         ) : (
           <div className="lead-table-wrap">
             <table className="lead-table">
               <thead>
                 <tr>
+                  <th>Address</th>
                   <th>City</th>
                   <th>ARV</th>
                   <th>Rehab</th>
                   <th>Asking</th>
                   <th>MLS</th>
+                  <th>Flex</th>
                   <th>Status</th>
                   <th>Recommended</th>
                   <th>Analyzed</th>
@@ -413,11 +443,13 @@ export default function DealUnderwriter() {
               <tbody>
                 {savedRows.map((r) => (
                   <tr key={r.id}>
-                    <td className="cell-owner">{r.city}</td>
+                    <td className="cell-owner">{r.property_address || '—'}</td>
+                    <td>{r.city}</td>
                     <td className="cell-num">{money(r.arv)}</td>
                     <td className="cell-num">{money(r.rehab)}</td>
                     <td className="cell-num">{money(r.asking_price)}</td>
                     <td>{r.is_mls ? 'yes' : 'no'}</td>
+                    <td>{r.allow_flex ? 'yes' : 'no'}</td>
                     <td>
                       <span className={`temp ${DEAL_STATUS_CLS[r.deal_status] || ''}`}>
                         {r.deal_status}
@@ -426,10 +458,7 @@ export default function DealUnderwriter() {
                     <td>{r.recommended_strategy}</td>
                     <td className="cell-num">
                       {new Date(r.analyzed_at).toLocaleString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        hour: 'numeric',
-                        minute: '2-digit',
+                        month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
                       })}
                     </td>
                   </tr>
