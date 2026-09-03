@@ -11,11 +11,13 @@ import { supabase } from './lib/supabase.js'
 import crest from './assets/legacy-crest.png'
 import Login from './pages/Login.jsx'
 import LeadManager from './pages/LeadManager.jsx'
+import MlsFastLane from './pages/MlsFastLane.jsx'
 import DealUnderwriter from './pages/DealUnderwriter.jsx'
 import ActivePipeline from './pages/ActivePipeline.jsx'
 
 const NAV = [
   { to: '/leads', label: 'Lead Manager' },
+  { to: '/mls-fast-lane', label: 'MLS Fast Lane' },
   { to: '/underwriter', label: 'Deal Underwriter' },
   { to: '/pipeline', label: 'Active Pipeline' },
 ]
@@ -24,6 +26,10 @@ const PAGE_META = {
   '/leads': {
     title: 'Lead Manager',
     subtitle: 'Work the queue by temperature — fire first.',
+  },
+  '/mls-fast-lane': {
+    title: 'MLS Fast Lane',
+    subtitle: 'Raw MLS intake and enrichment status — newest first.',
   },
   '/underwriter': {
     title: 'Deal Underwriter',
@@ -145,6 +151,7 @@ export default function App() {
         <Route path="/" element={<Navigate to="/leads" replace />} />
         <Route path="/login" element={<Navigate to="/leads" replace />} />
         <Route path="/leads" element={<LeadManager />} />
+        <Route path="/mls-fast-lane" element={<MlsFastLane />} />
         <Route path="/underwriter" element={<DealUnderwriter />} />
         <Route path="/pipeline" element={<ActivePipeline />} />
         <Route path="*" element={<Navigate to="/leads" replace />} />
