@@ -1,0 +1,11 @@
+{
+  "name": "underwriting",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "description": "PropFlowREI deterministic underwriting engine. CommonJS island inside the ESM app (this package.json overrides the root \"type\": \"module\").",
+  "main": "underwritingEngine.js",
+  "scripts": {
+    "test": "node test-underwritingEngine.js"
+  }
+}
