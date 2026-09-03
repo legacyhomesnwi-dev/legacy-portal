@@ -20,6 +20,12 @@
   --hot-dim: rgba(249, 115, 22, 0.14);
   --warm: #eab308;
   --warm-dim: rgba(234, 179, 8, 0.14);
+  --nurture: #38bdf8;
+  --nurture-dim: rgba(56, 189, 248, 0.14);
+  --low: #64748b;
+  --low-dim: rgba(100, 116, 139, 0.16);
+  --insufficient: #94a3b8;
+  --insufficient-dim: rgba(148, 163, 184, 0.1);
 
   --radius: 10px;
   --radius-sm: 7px;
@@ -386,6 +392,18 @@ input:focus {
   color: var(--warm);
   background: var(--warm-dim);
 }
+.temp-nurture {
+  color: var(--nurture);
+  background: var(--nurture-dim);
+}
+.temp-low {
+  color: var(--low);
+  background: var(--low-dim);
+}
+.temp-insufficient {
+  color: var(--insufficient);
+  background: var(--insufficient-dim);
+}
 
 /* ---------- Lead list ---------- */
 .lead-list {
@@ -690,4 +708,105 @@ input:focus {
     flex-direction: row;
     align-items: center;
   }
+}
+
+/* ---------- Lead Manager table (Phase 12, pulled forward) ---------- */
+.lead-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+}
+
+.lead-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.lead-table th {
+  text-align: left;
+  padding: 11px 14px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.lead-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  vertical-align: top;
+}
+
+.lead-table tr:last-child td {
+  border-bottom: none;
+}
+
+.lead-table tr:hover td {
+  background: var(--bg-hover);
+}
+
+.lead-table .cell-owner {
+  color: var(--text);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.lead-table .cell-num {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.lead-table .cell-score {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.signal-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  max-width: 420px;
+}
+
+.signal-chip {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.rt-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.rt-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-dim);
+}
+
+.rt-dot.live {
+  background: #22c55e;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.18);
+}
+
+.lm-statusbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
 }
