@@ -41,6 +41,22 @@ const PAGE_META = {
   },
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// TEMPORARY — PUBLIC READ-ONLY DEMO (set 2026-09-03)
+//
+// Supabase Auth was never built; only the <Login> UI shell exists. To get the
+// portal in front of the team today, the auth gate is disabled below: the app
+// renders Lead Manager / MLS Fast Lane / Deal Underwriter directly, no session
+// required. All data is read through the anon key + the `anon_read_*` RLS
+// policies, so this is genuinely read-only — nothing here can write.
+//
+// THIS IS NOT THE FINAL STATE. When real auth lands: set DEMO_PUBLIC = false
+// (or delete it and the `if (DEMO_PUBLIC)` branch in App()). The original
+// `if (!session)` redirect and the <Login> route are left fully intact right
+// where they were, so re-gating is a one-line change.
+// ───────────────────────────────────────────────────────────────────────────
+const DEMO_PUBLIC = true
+
 /** Tracks the Supabase auth session. `undefined` = still loading. */
 function useSession() {
   const [session, setSession] = useState(undefined)
@@ -125,31 +141,38 @@ function AppShell({ session, children }) {
 export default function App() {
   const session = useSession()
 
-  if (session === undefined) {
-    return (
-      <div className="loading">
-        <div>
-          <div className="spinner" />
-          Loading portal…
+  // --- Normal auth flow (disabled while DEMO_PUBLIC is true; see note above) ---
+  if (!DEMO_PUBLIC) {
+    if (session === undefined) {
+      return (
+        <div className="loading">
+          <div>
+            <div className="spinner" />
+            Loading portal…
+          </div>
         </div>
-      </div>
-    )
-  }
+      )
+    }
 
-  if (!session) {
-    return (
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
-      </Routes>
-    )
+    if (!session) {
+      return (
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
+      )
+    }
   }
 
   return (
-    <AppShell session={session}>
+    <AppShell session={session ?? null}>
       <Routes>
         <Route path="/" element={<Navigate to="/leads" replace />} />
-        <Route path="/login" element={<Navigate to="/leads" replace />} />
+        {/* Login screen stays viewable in demo mode; real auth just isn't wired yet */}
+        <Route
+          path="/login"
+          element={DEMO_PUBLIC ? <Login /> : <Navigate to="/leads" replace />}
+        />
         <Route path="/leads" element={<LeadManager />} />
         <Route path="/mls-fast-lane" element={<MlsFastLane />} />
         <Route path="/underwriter" element={<DealUnderwriter />} />
